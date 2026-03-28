@@ -1,0 +1,57 @@
+{
+    "name": "ez-php/metrics",
+    "version": "1.2.0",
+    "description": "Prometheus metrics endpoint for ez-php — Counter, Gauge, Histogram with a /metrics route and static Metrics facade.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Andreas Uretschnig",
+            "email": "andreas.uretschnig@gmail.com"
+        }
+    ],
+    "keywords": [
+        "metrics",
+        "prometheus",
+        "monitoring",
+        "observability",
+        "php",
+        "framework",
+        "ez-php"
+    ],
+    "homepage": "https://github.com/ez-php/metrics",
+    "support": {
+        "issues": "https://github.com/ez-php/metrics/issues",
+        "source": "https://github.com/ez-php/metrics"
+    },
+    "require": {
+        "php": "^8.5",
+        "ez-php/contracts": "^1.1",
+        "ez-php/framework": "^1.1",
+        "ez-php/http": "^1.1"
+    },
+    "require-dev": {
+        "ez-php/docker": "^1.1",
+        "phpunit/phpunit": "^13.0",
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.94",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "phpstan/phpstan-deprecation-rules": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "EzPhp\\Metrics\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "cs": "php-cs-fixer fix",
+        "analyse": "phpstan analyse",
+        "test": "phpunit",
+        "full": "composer analyse && composer cs && composer test"
+    }
+}
