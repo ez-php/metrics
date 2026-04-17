@@ -1,6 +1,6 @@
 {
     "name": "ez-php/metrics",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "description": "Prometheus metrics endpoint for ez-php — Counter, Gauge, Histogram with a /metrics route and static Metrics facade.",
     "type": "library",
     "license": "MIT",
