@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ddb03dd97cfa4401ac663129c1a9d7f4",
+    "content-hash": "e2bb6721b4bad4747c2052af8d64aaab",
     "packages": [
         {
             "name": "ez-php/console",
