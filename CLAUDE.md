@@ -260,7 +260,8 @@ src/
 ├── MetricsRegistry.php          — factory + store: counter(), gauge(), histogram(), render()
 ├── Metrics.php                  — static facade backed by MetricsRegistry singleton
 ├── MetricsController.php        — handles GET /metrics; returns Prometheus text response
-└── MetricsServiceProvider.php   — binds MetricsRegistry, initialises Metrics facade, registers route
+├── MetricsServiceProvider.php   — binds MetricsRegistry, initialises Metrics facade, registers route
+└── HealthMetricsListener.php    — wraps a HealthRegistry; exposes probe status/latency as gauges (soft dependency on ez-php/health — require-dev only)
 
 tests/
 ├── TestCase.php
@@ -269,7 +270,8 @@ tests/
 ├── HistogramTest.php            — observe, cumulative buckets, custom buckets, labels, +Inf, render
 ├── MetricsRegistryTest.php      — factory idempotency, type conflict throws, render assembly
 ├── MetricsTest.php              — facade init/reset, delegation, fail-fast throw
-└── MetricsControllerTest.php    — HTTP 200, content type, body delegation to registry
+├── MetricsControllerTest.php    — HTTP 200, content type, body delegation to registry
+└── HealthMetricsListenerTest.php — covers HealthMetricsListener: status→gauge mapping (1/0.5/0), latency gauge, empty-registry no-op
 ```
 
 ---
@@ -331,6 +333,12 @@ Static facade following the same pattern as `Health`, `Flag`, and `Notification`
 
 ---
 
+### HealthMetricsListener (`src/HealthMetricsListener.php`)
+
+Wraps a `HealthRegistry` (from `ez-php/health`) and a `MetricsRegistry`. `record()` calls `HealthRegistry::run()`, then sets two gauges per probe: `health_probe_status{probe="<name>"}` (`1`=ok, `0.5`=degraded, `0`=unhealthy) and `health_probe_latency_ms{probe="<name>"}`. No-op when the health registry has no probes — nothing is registered on `MetricsRegistry`, so `/metrics` stays clean when health checks aren't wired up. Application code calls `record()` on whatever cadence it wants (e.g. before every `/metrics` scrape, or on a scheduled interval) — this class does not register itself anywhere automatically.
+
+---
+
 ### MetricsController (`src/MetricsController.php`)
 
 Invokable controller resolved from the container. Calls `$registry->render()` and returns `Response` with status 200 and `Content-Type: text/plain; version=0.0.4; charset=utf-8`.
@@ -357,6 +365,9 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 - **`render()` on each metric produces a self-contained block.** The registry simply joins blocks with `"\n"`. This lets metrics be tested in complete isolation without a registry.
 - **No metric persistence across requests.** In-memory only. For persistent metrics (across PHP-FPM workers, across restarts), use an external store such as Redis — this is out of scope for this module.
 - **No authentication on `/metrics` by default.** Following the same pattern as `ez-php/health` — operators add middleware at the application layer.
+- **`HealthMetricsListener` lives here, not in `ez-php/health`.** `ez-php/health`'s own CLAUDE.md rules out metrics aggregation/Prometheus export inside that module ("What does not belong in this module"). `ez-php/metrics` is the module that already owns gauge creation and Prometheus rendering, so the bridge belongs here — `ez-php/health` itself needed zero changes.
+- **`ez-php/health` is a soft dependency, `require-dev` only.** `HealthMetricsListener` uses `HealthRegistry`/`HealthStatus`, but `composer.json`'s `require` block stays limited to `ez-php/contracts`/`ez-php/framework`/`ez-php/http` — same reasoning as `ez-php/orm`'s `LoggingDatabase`: a hard dependency would force `ez-php/health` on every application that installs `ez-php/metrics`, even ones with no health checks. PSR-4 only resolves `HealthMetricsListener.php` (and therefore `HealthRegistry`) when something actually references the class.
+- **`record()` is not auto-wired to anything.** No service-provider hook calls it automatically, and it is not registered against a schedule. The application decides when a `record()` call is worth its cost (e.g. immediately before serving `/metrics`, or on a `schedule:run` tick) — a module-level default would be a guess about deployment shape this module can't make.
 
 ---
 
@@ -370,6 +381,7 @@ No external infrastructure required. All tests run in-process with no I/O.
 - `MetricsRegistryTest` — idempotent factory methods, type conflict exceptions (all three combinations), render assembly, blank line separation
 - `MetricsTest` — fail-fast RuntimeException before init, setRegistry/resetRegistry, delegation to registry, registry replacement
 - `MetricsControllerTest` — HTTP 200, content type header, body passthrough, empty body when no metrics
+- `HealthMetricsListenerTest` — constructs a real `HealthRegistry` with fake `ProbeInterface` implementations, asserts the rendered gauge lines directly (no mocking of `MetricsRegistry`)
 
 `Metrics::resetRegistry()` is called in `tearDown()` of `MetricsTest` to prevent static state leaking between test classes.
 
@@ -384,6 +396,7 @@ No external infrastructure required. All tests run in-process with no I/O.
 | Push gateway support (Prometheus Pushgateway) | Application layer |
 | StatsD / InfluxDB / OpenTelemetry export | Separate module or application layer |
 | Automatic HTTP request instrumentation | Application middleware (use `Metrics::counter(...)` in your own `MetricsMiddleware`) |
+| Scheduling/triggering `HealthMetricsListener::record()` | Application layer (a middleware, a `schedule:run` job, etc.) |
 | Alerting rules | Prometheus server configuration |
 | Dashboard definitions | Grafana or similar |
 | Health checks / liveness probe | `ez-php/health` |

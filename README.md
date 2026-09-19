@@ -103,6 +103,20 @@ The `/metrics` endpoint is unprotected by default. To restrict access, apply mid
 
 Both are complementary production-observability tools.
 
+`HealthMetricsListener` bridges the two directly, so a health check's status/latency shows up
+as a metric without duplicating probe logic (requires `ez-php/health` — a soft dependency,
+declared in `require-dev` here, install it separately):
+
+```php
+use EzPhp\Metrics\HealthMetricsListener;
+
+$listener = new HealthMetricsListener($healthRegistry, $metricsRegistry);
+$listener->record(); // before serving /metrics, or on a schedule — your call
+```
+
+Sets `health_probe_status{probe="<name>"}` (`1`=ok, `0.5`=degraded, `0`=unhealthy) and
+`health_probe_latency_ms{probe="<name>"}` for every probe in `$healthRegistry`.
+
 ---
 
 ## License
