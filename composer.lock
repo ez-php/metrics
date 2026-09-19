@@ -862,16 +862,16 @@
         },
         {
             "name": "ez-php/health",
-            "version": "2.4.1",
+            "version": "2.4.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/health.git",
-                "reference": "e75691f9445550845456d877c5e7bfbef9869087"
+                "reference": "08aec5d168bcaae1f5b514de198f394537c56f3e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/health/zipball/e75691f9445550845456d877c5e7bfbef9869087",
-                "reference": "e75691f9445550845456d877c5e7bfbef9869087",
+                "url": "https://api.github.com/repos/ez-php/health/zipball/08aec5d168bcaae1f5b514de198f394537c56f3e",
+                "reference": "08aec5d168bcaae1f5b514de198f394537c56f3e",
                 "shasum": ""
             },
             "require": {
@@ -919,7 +919,7 @@
                 "issues": "https://github.com/ez-php/health/issues",
                 "source": "https://github.com/ez-php/health"
             },
-            "time": "2026-09-16T13:25:08+00:00"
+            "time": "2026-09-19T00:54:22+00:00"
         },
         {
             "name": "fidry/cpu-core-counter",
