@@ -7,6 +7,7 @@ namespace Tests;
 use EzPhp\Health\HealthRegistry;
 use EzPhp\Health\HealthResult;
 use EzPhp\Health\ProbeInterface;
+use EzPhp\Metrics\Gauge;
 use EzPhp\Metrics\HealthMetricsListener;
 use EzPhp\Metrics\MetricsRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -37,8 +38,8 @@ final class HealthMetricsListenerFakeProbe implements ProbeInterface
 }
 
 #[CoversClass(HealthMetricsListener::class)]
-#[UsesClass(HealthRegistry::class)]
 #[UsesClass(MetricsRegistry::class)]
+#[UsesClass(Gauge::class)]
 final class HealthMetricsListenerTest extends TestCase
 {
     public function testRecordSetsOneGaugeValuePerProbeStatus(): void
