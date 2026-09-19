@@ -1,6 +1,6 @@
 {
     "name": "ez-php/metrics",
-    "version": "2.4.4",
+    "version": "2.4.5",
     "description": "Prometheus metrics endpoint for ez-php — Counter, Gauge, Histogram with a /metrics route and static Metrics facade.",
     "type": "library",
     "license": "MIT",
@@ -29,6 +29,9 @@
         "ez-php/contracts": "^2.0",
         "ez-php/framework": "^2.0",
         "ez-php/http": "^2.0"
+    },
+    "suggest": {
+        "ez-php/health": "Needed for HealthMetricsListener (probe status/latency as gauges)"
     },
     "require-dev": {
         "ez-php/docker": "^2.0",
