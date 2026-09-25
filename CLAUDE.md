@@ -150,7 +150,10 @@ php make_module.php <name> --description="..." --services=mysql,redis
 `<name>` is the kebab-case package name; the namespace is derived as
 `EzPhp\<PascalCase>` unless `--namespace=` overrides it (`bignum` → `BigNum`,
 `opcache` → `OPCache`, and `dotenv` → `Env` are existing exceptions the guess
-gets wrong).
+gets wrong; `websocket-client` → `WebsocketClient`, `websocket-tls` → `WebsocketTls`,
+`webauthn-metadata` → `WebauthnMetadata` and `metrics-statsd` → `MetricsStatsd` are
+intentional lower-case-word namespaces, and `testing-application` shares `EzPhp\Testing\`
+with `testing`).
 
 To bring in a module whose code already lives in its own repository instead of
 generating a fresh skeleton, pass `--repo=` with a git URL:
@@ -234,7 +237,7 @@ Only set a port for services the module actually uses. Modules without external 
 
 > The "Redis host port" column is likewise the **host**-published port. `ez-php/cache`, `ez-php/queue`, and `ez-php/rate-limiter` map it through a separate `REDIS_HOST_PORT` env var in `docker-compose.yml`, keeping `REDIS_PORT` fixed at `6379` for in-container connections (the app container always reaches Redis at `redis:6379` over the Compose network, regardless of the host mapping) — the root project and the `ez-php/` application template are the two exceptions, since both have no host/container split and use `REDIS_PORT` for both (the template's other in-container Redis settings — `CACHE_REDIS_PORT`, `QUEUE_REDIS_PORT`, `RATE_LIMITER_REDIS_PORT` — stay fixed at `6379` regardless, same as every other module).
 
-> This table tracks only MySQL, Redis, and Meilisearch ports — the three services shared across multiple modules where a collision is otherwise easy to introduce. `ez-php/mail`'s Mailpit service is the one other module with published host ports: SMTP `1025` and web UI `8025`, mapped through `MAILPIT_SMTP_HOST_PORT`/`MAILPIT_API_HOST_PORT` in `modules/mail/docker-compose.yml` (mirroring the `*_HOST_PORT` pattern above), documented in `modules/mail/.env.example`. It isn't a table column because no other module runs Mailpit, so there is nothing to collide with — but a new module adding its own single-use service's ports should likewise parameterize them and document the defaults in its own `.env.example` rather than adding a column here.
+> This table tracks only MySQL, Redis, and Meilisearch ports — the three services shared across multiple modules where a collision is otherwise easy to introduce. Mailpit is the one other service with published host ports: SMTP `1025` and web UI `8025`. `ez-php/mail` maps them through `MAILPIT_SMTP_HOST_PORT`/`MAILPIT_API_HOST_PORT` in `modules/mail/docker-compose.yml` (mirroring the `*_HOST_PORT` pattern above, documented in `modules/mail/.env.example`); the root project and the `ez-php/` template each run their own Mailpit on the same defaults (`MAIL_PORT`/`MAIL_WEB_PORT`), so **these three stacks cannot run at the same time** without overriding those variables. It isn't a table column because no module beyond those three runs Mailpit — but a new module adding its own single-use service's ports should likewise parameterize them and document the defaults in its own `.env.example` rather than adding a column here.
 
 ### 5 — Monorepo scripts
 
@@ -370,6 +373,7 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 - **`record()` is not auto-wired to anything.** No service-provider hook calls it automatically, and it is not registered against a schedule. The application decides when a `record()` call is worth its cost (e.g. immediately before serving `/metrics`, or on a `schedule:run` tick) — a module-level default would be a guess about deployment shape this module can't make.
 
 ---
+- **Depends on the concrete framework `Router`** — `ez-php/contracts` has no routing contract, so this module's service provider imports `EzPhp\Routing\Router` (and hence requires `ez-php/framework`) to register `GET /metrics`. Deliberate exception to the "depend on contracts only" boundary; it goes away if a `RouterInterface` is ever added to `ez-php/contracts`.
 
 ## Testing approach
 
