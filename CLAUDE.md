@@ -144,14 +144,14 @@ wiring in one step, wrapping `docker-init` for the Docker subset:
 
 ```
 composer module:make <name> -- --description="..."
-php make_module.php <name> --description="..." --services=mysql,redis
+php make_module.php <name> --description="..." --services=mysql,redis --extensions=gmp
 ```
 
 `<name>` is the kebab-case package name; the namespace is derived as
 `EzPhp\<PascalCase>` (each `-`-separated word upper-cased) unless `--namespace=`
 overrides it. Existing exceptions the guess gets wrong: `bignum` → `BigNum`,
 `dataloader` → `DataLoader`, `dotenv` → `Env`, `graphql` → `GraphQL`, `oauth` → `OAuth`,
-`opcache` → `OPCache`, `swagger-ui` → `SwaggerUI`, `webauthn` → `WebAuthn` and
+`opcache` → `OPCache`, `openapi` → `OpenApi`, `swagger-ui` → `SwaggerUI`, `webauthn` → `WebAuthn` and
 `websocket` → `WebSocket`; `websocket-client` → `WebsocketClient`, `websocket-tls` → `WebsocketTls`,
 `webauthn-metadata` → `WebauthnMetadata` and `metrics-statsd` → `MetricsStatsd` are
 intentional lower-case-word namespaces, and `testing-application` shares `EzPhp\Testing\`
@@ -166,7 +166,7 @@ php make_module.php <name> --repo=<git-url> [--namespace=Foo]
 
 This runs `git submodule add <url> modules/<name>` instead of writing package
 files, then applies the same monorepo wiring below. It is mutually exclusive
-with `--services` and `--description` — a submodule brings its own Docker
+with `--services`/`--extensions` and `--description` — a submodule brings its own Docker
 scaffold (if any) and its own `composer.json` description. A minimal `CLAUDE.md`
 stub is written only if the submodule doesn't already ship one, so
 `composer guidelines:sync` has a `# Package:` heading to anchor part 1 against.
@@ -235,19 +235,23 @@ After scaffolding:
 | `ez-php/rate-limiter` | — | 6382 (`REDIS_HOST_PORT`) | — |
 | `ez-php/search` | — | — | 7701 |
 | `ez-php/event-store` | 3311 | — | — |
-| **next free** | **3312** | **6384** | **7702** |
+| `ez-php/broadcast` | — | 6384 (`REDIS_HOST_PORT`) | — |
+| `ez-php/feature-flags` | — | 6385 (`REDIS_HOST_PORT`) | — |
+| `ez-php/scheduler` | — | 6386 (`REDIS_HOST_PORT`) | — |
+| `ez-php/session` | — | 6387 (`REDIS_HOST_PORT`) | — |
+| **next free** | **3312** | **6388** | **7702** |
 
 Only set a port for services the module actually uses. Modules without external services need no port config.
 
 > The `MEILISEARCH_PORT` column is the **host** port. Inside a Compose network the service is always reachable at `http://meilisearch:7700` regardless of the host mapping — only publish-side ports need to be unique.
 
-> The "Redis host port" column is likewise the **host**-published port. `ez-php/cache`, `ez-php/queue`, and `ez-php/rate-limiter` map it through a separate `REDIS_HOST_PORT` env var in `docker-compose.yml`, keeping `REDIS_PORT` fixed at `6379` for in-container connections (the app container always reaches Redis at `redis:6379` over the Compose network, regardless of the host mapping) — the root project and the `ez-php/` application template are the two exceptions, since both have no host/container split and use `REDIS_PORT` for both (the template's other in-container Redis settings — `CACHE_REDIS_PORT`, `QUEUE_REDIS_PORT`, `RATE_LIMITER_REDIS_PORT`, `HEALTH_REDIS_PORT` — stay fixed at `6379` regardless, same as every other module).
+> The "Redis host port" column is likewise the **host**-published port. Every module row maps it through a separate `REDIS_HOST_PORT` env var in `docker-compose.yml`, keeping `REDIS_PORT` fixed at `6379` for in-container connections (the app container always reaches Redis at `redis:6379` over the Compose network, regardless of the host mapping) — the root project and the `ez-php/` application template are the two exceptions, since both have no host/container split and use `REDIS_PORT` for both (the template's other in-container Redis settings — `CACHE_REDIS_PORT`, `QUEUE_REDIS_PORT`, `RATE_LIMITER_REDIS_PORT`, `HEALTH_REDIS_PORT` — stay fixed at `6379` regardless, same as every other module).
 
-> This table tracks only MySQL, Redis, and Meilisearch ports — the three services shared across multiple modules where a collision is otherwise easy to introduce. Mailpit is the one other service with published host ports: SMTP `1025` and web UI `8025`. `ez-php/mail` maps them through `MAILPIT_SMTP_HOST_PORT`/`MAILPIT_API_HOST_PORT` in `modules/mail/docker-compose.yml` (mirroring the `*_HOST_PORT` pattern above, documented in `modules/mail/.env.example`); the root project and the `ez-php/` template each run their own Mailpit on the same defaults (`MAIL_PORT`/`MAIL_WEB_PORT`), so **these three stacks cannot run at the same time** without overriding those variables. It isn't a table column because no module beyond those three runs Mailpit — but a new module adding its own single-use service's ports should likewise parameterize them and document the defaults in its own `.env.example` rather than adding a column here.
+> This table tracks only MySQL, Redis, and Meilisearch ports — the three services shared across multiple modules where a collision is otherwise easy to introduce. Mailpit is the one other service with published host ports: SMTP `1025` and web UI `8025`. `ez-php/mail` maps them through `MAILPIT_SMTP_HOST_PORT`/`MAILPIT_API_HOST_PORT` in `modules/mail/docker-compose.yml` (mirroring the `*_HOST_PORT` pattern above, documented in `modules/mail/.env.example`); the root project and the `ez-php/` template each run their own Mailpit on the same defaults (`MAIL_PORT`/`MAIL_WEB_PORT`), so **these three stacks cannot run at the same time** without overriding those variables. It isn't a table column because no module beyond those three runs Mailpit — but a new module adding its own single-use service's ports should likewise parameterize them and document the defaults in its own `.env.example` rather than adding a column here. Services reached only over the Compose network publish no host port and need no entry at all: Memcached (`memcached:11211` in the root stack and `ez-php/cache`) and the opt-in Elasticsearch/Typesense backends in `modules/search/docker-compose.ci.yml`.
 
 ### 5 — Monorepo scripts
 
-`packages.sh` at the project root is the **central package registry**. Both `push_all.sh` and `update_all.sh` source it — the package list lives in exactly one place.
+`packages.sh` at the project root is the **central package registry**. Every multi-package script sources it — `update_all.sh`, `fullcheck.sh`, `bump_version.sh` and the `git_*_all.sh` scripts (`git_push_all.sh`, `git_pull_all.sh`, `git_tag_all.sh`, `git_delete_all_tags.sh`) — so the package list lives in exactly one place.
 
 When adding a new module, add `"$ROOT/modules/<name>"` to the `PACKAGES` array in `packages.sh` in **alphabetical order** among the other `modules/*` entries (before `framework`, `ez-php`, and the root entry at the end).
 
@@ -360,13 +364,13 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 
 `boot()` does two things:
 1. Calls `Metrics::setRegistry($this->app->make(MetricsRegistry::class))`.
-2. Registers `GET /metrics` on the `Router` (wrapped in `try/catch` for CLI/test contexts where the Router is not bound).
+2. Registers `GET /metrics` on the bound `RouterInterface` (wrapped in `try/catch` for CLI/test contexts where none is bound).
 
 ---
 
 ## Design decisions and constraints
 
-- **Depends on `ez-php/framework` (same as `ez-php/health`).** The /metrics endpoint requires the Router. This coupling is intentional — the module's primary purpose is serving an HTTP endpoint.
+- **Routes register against `EzPhp\Contracts\RouterInterface`**, not the framework's concrete `Router` — the framework's `RouterServiceProvider` binds the interface to its router, so this module needs only `ez-php/contracts` + `ez-php/http` at runtime (`ez-php/framework` is not required).
 - **Labels are untyped `array<string, string>` passed at observation time.** There is no upfront label-name declaration. This is simpler than pre-declaring label names and sufficient for the use-cases this module targets. The sorted `labelKey()` ensures `['b'=>'2','a'=>'1']` and `['a'=>'1','b'=>'2']` map to the same series.
 - **Bucket counts keyed by string representation of the bound.** Using the string form (`'0.1'`) instead of float as an array key avoids float comparison issues and makes PHPStan-safe lookups straightforward with `array<string, float>`.
 - **`LabelFormatterTrait` instead of a base class.** Three metric types (Counter, Gauge, Histogram) share three private helpers. A trait avoids coupling all three to an abstract base class while keeping the logic DRY. The trait is `@internal`.
@@ -375,11 +379,10 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 - **No metric persistence across requests.** In-memory only. For persistent metrics (across PHP-FPM workers, across restarts), use an external store such as Redis — this is out of scope for this module.
 - **No authentication on `/metrics` by default.** Following the same pattern as `ez-php/health` — operators add middleware at the application layer.
 - **`HealthMetricsListener` lives here, not in `ez-php/health`.** `ez-php/health`'s own CLAUDE.md rules out metrics aggregation/Prometheus export inside that module ("What does not belong in this module"). `ez-php/metrics` is the module that already owns gauge creation and Prometheus rendering, so the bridge belongs here — `ez-php/health` itself needed zero changes.
-- **`ez-php/health` is a soft dependency, `require-dev` only.** `HealthMetricsListener` uses `HealthRegistry`/`HealthStatus`, but `composer.json`'s `require` block stays limited to `ez-php/contracts`/`ez-php/framework`/`ez-php/http` — same reasoning as `ez-php/orm`'s `LoggingDatabase`: a hard dependency would force `ez-php/health` on every application that installs `ez-php/metrics`, even ones with no health checks. PSR-4 only resolves `HealthMetricsListener.php` (and therefore `HealthRegistry`) when something actually references the class.
+- **`ez-php/health` is a soft dependency, `require-dev` only.** `HealthMetricsListener` uses `HealthRegistry`/`HealthStatus`, but `composer.json`'s `require` block stays limited to `ez-php/contracts`/`ez-php/http` — same reasoning as `ez-php/orm`'s `LoggingDatabase`: a hard dependency would force `ez-php/health` on every application that installs `ez-php/metrics`, even ones with no health checks. PSR-4 only resolves `HealthMetricsListener.php` (and therefore `HealthRegistry`) when something actually references the class.
 - **`record()` is not auto-wired to anything.** No service-provider hook calls it automatically, and it is not registered against a schedule. The application decides when a `record()` call is worth its cost (e.g. immediately before serving `/metrics`, or on a `schedule:run` tick) — a module-level default would be a guess about deployment shape this module can't make.
 
 ---
-- **Depends on the concrete framework `Router`** — `ez-php/contracts` has no routing contract, so this module's service provider imports `EzPhp\Routing\Router` (and hence requires `ez-php/framework`) to register `GET /metrics`. Deliberate exception to the "depend on contracts only" boundary; it goes away if a `RouterInterface` is ever added to `ez-php/contracts`.
 
 ## Testing approach
 

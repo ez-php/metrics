@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace EzPhp\Metrics;
 
 use EzPhp\Contracts\ContainerInterface;
+use EzPhp\Contracts\RouterInterface;
 use EzPhp\Contracts\ServiceProvider;
-use EzPhp\Routing\Router;
 
 /**
  * Registers the MetricsRegistry in the container, initialises the Metrics facade,
@@ -42,7 +42,7 @@ final class MetricsServiceProvider extends ServiceProvider
         Metrics::setRegistry($this->app->make(MetricsRegistry::class));
 
         try {
-            $router = $this->app->make(Router::class);
+            $router = $this->app->make(RouterInterface::class);
             $router->get('/metrics', [MetricsController::class, '__invoke']);
         } catch (\Throwable) {
             // Router not bound (CLI or isolated test context) — route skipped.
