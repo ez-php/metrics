@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace EzPhp\Metrics;
 
+use EzPhp\Metrics\Storage\InMemoryMetricsStorage;
+use EzPhp\Metrics\Storage\MetricsStorageInterface;
+
 /**
  * Central registry for all Prometheus metrics.
  *
@@ -15,12 +18,49 @@ namespace EzPhp\Metrics;
  * `render()` produces the full Prometheus text exposition format output for all
  * registered metrics, ready to be served at the `/metrics` endpoint.
  *
+ * Values live in a MetricsStorageInterface — per process by default; with a shared
+ * storage (APCu, Redis) every PHP-FPM worker adds to the same series. Each metric's
+ * description is stored too, so render() also includes metrics that this process
+ * never declared (e.g. counted only in other requests).
+ *
  * @package EzPhp\Metrics
  */
 final class MetricsRegistry
 {
     /** @var array<string, MetricInterface> */
     private array $metrics = [];
+
+    /**
+     * @param MetricsStorageInterface $storage
+     */
+    private readonly MetricsDispatcher $dispatcher;
+
+    public function __construct(
+        private readonly MetricsStorageInterface $storage = new InMemoryMetricsStorage(),
+    ) {
+        $this->dispatcher = new MetricsDispatcher();
+    }
+
+    /**
+     * Register a listener for every value recorded through this registry's metrics
+     * (e.g. ez-php/metrics-statsd's StatsdMetricsListener).
+     *
+     * @param MetricsListenerInterface $listener
+     *
+     * @return void
+     */
+    public function listen(MetricsListenerInterface $listener): void
+    {
+        $this->dispatcher->add($listener);
+    }
+
+    /**
+     * The storage the metrics of this registry write to.
+     */
+    public function storage(): MetricsStorageInterface
+    {
+        return $this->storage;
+    }
 
     /**
      * Returns (or creates) a `Counter` with the given name.
@@ -34,7 +74,8 @@ final class MetricsRegistry
     public function counter(string $name, string $help): Counter
     {
         if (!isset($this->metrics[$name])) {
-            $this->metrics[$name] = new Counter($name, $help);
+            $this->metrics[$name] = new Counter($name, $help, $this->storage, $this->dispatcher);
+            $this->storage->describe($name, ['type' => MetricType::COUNTER->value, 'help' => $help, 'buckets' => []]);
         }
 
         $metric = $this->metrics[$name];
@@ -60,7 +101,8 @@ final class MetricsRegistry
     public function gauge(string $name, string $help): Gauge
     {
         if (!isset($this->metrics[$name])) {
-            $this->metrics[$name] = new Gauge($name, $help);
+            $this->metrics[$name] = new Gauge($name, $help, $this->storage, $this->dispatcher);
+            $this->storage->describe($name, ['type' => MetricType::GAUGE->value, 'help' => $help, 'buckets' => []]);
         }
 
         $metric = $this->metrics[$name];
@@ -91,7 +133,8 @@ final class MetricsRegistry
         array $buckets = Histogram::DEFAULT_BUCKETS,
     ): Histogram {
         if (!isset($this->metrics[$name])) {
-            $this->metrics[$name] = new Histogram($name, $help, $buckets);
+            $this->metrics[$name] = new Histogram($name, $help, $buckets, $this->storage, $this->dispatcher);
+            $this->storage->describe($name, ['type' => MetricType::HISTOGRAM->value, 'help' => $help, 'buckets' => $buckets]);
         }
 
         $metric = $this->metrics[$name];
@@ -115,13 +158,38 @@ final class MetricsRegistry
      */
     public function render(): string
     {
-        if ($this->metrics === []) {
+        $metrics = $this->metrics;
+
+        // Metrics known only from the storage (declared by other processes).
+        foreach ($this->storage->descriptions() as $name => $description) {
+            if (isset($metrics[$name])) {
+                continue;
+            }
+
+            $metric = match ($description['type']) {
+                MetricType::COUNTER->value => new Counter($name, $description['help'], $this->storage),
+                MetricType::GAUGE->value => new Gauge($name, $description['help'], $this->storage),
+                MetricType::HISTOGRAM->value => new Histogram(
+                    $name,
+                    $description['help'],
+                    $description['buckets'] !== [] ? $description['buckets'] : Histogram::DEFAULT_BUCKETS,
+                    $this->storage,
+                ),
+                default => null,
+            };
+
+            if ($metric !== null) {
+                $metrics[$name] = $metric;
+            }
+        }
+
+        if ($metrics === []) {
             return '';
         }
 
         $blocks = [];
 
-        foreach ($this->metrics as $metric) {
+        foreach ($metrics as $metric) {
             $blocks[] = $metric->render();
         }
 

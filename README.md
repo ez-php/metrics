@@ -88,9 +88,41 @@ request_duration_seconds_sum{route="/api/users"} 1.23
 
 ---
 
+## Sharing values between workers
+
+By default values live in the PHP process — fine for long-running processes, but under PHP-FPM
+every request starts from zero. Pick a shared storage in `config/metrics.php`:
+
+| `metrics.storage` | Shared by | Requires |
+|---|---|---|
+| `memory` (default) | nothing — one process | — |
+| `apcu` | the PHP-FPM workers of one host | `ext-apcu` (`apc.enable_cli=1` for CLI) |
+| `redis` | every host | `ext-redis`, `metrics.redis.*` |
+
+Metric descriptions are stored too, so the `/metrics` request lists series that were only touched in
+other requests. APCu stores values with 6 decimal places.
+
 ## Security
 
-The `/metrics` endpoint is unprotected by default. To restrict access, apply middleware in your route definition or via global middleware in your application.
+The endpoint is unprotected by default, and the provider registers the route itself, so there is
+no route definition of yours to add middleware to. To protect it, turn off auto-registration in
+`config/metrics.php` and register the controller yourself:
+
+```php
+// config/metrics.php
+return [
+    'endpoint' => false, // or METRICS_ENDPOINT= (empty)
+];
+
+// routes/web.php
+use EzPhp\Metrics\MetricsController;
+
+$router->get('/metrics', [MetricsController::class, '__invoke'])
+    ->middleware(App\Middleware\MetricsAuthMiddleware::class);
+```
+
+`metrics.endpoint` also changes the path (default `/metrics`). Global middleware
+(`$app->middleware(...)`) works too, but applies to every route.
 
 ---
 

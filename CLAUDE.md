@@ -28,10 +28,11 @@ docker compose exec app composer full
 Executes in order:
 1. `sync_guidelines.php --check` — fails if any `CLAUDE.md` has drifted from this file
 2. `check_test_classes.php` — fails on a duplicate test class name (all packages share the `Tests\` namespace, so a collision is a fatal error in the aggregated run, not a test failure)
-3. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
-4. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
+3. `check_module_deps.php` — fails when a package's code imports an ez-php package its `composer.json` does not declare (module `src`: `require`/`suggest`; tests: `require`/`require-dev` and their dependencies), or requires one it never uses
+4. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
+5. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
    *(Note: `@PHP85Migration` does not exist yet in php-cs-fixer; `@PHP83Migration` is the highest available and is used intentionally even though the project targets PHP 8.5)*
-5. `phpunit` — all tests with coverage
+6. `phpunit` — all tests with coverage
 
 Individual commands when needed:
 ```
@@ -40,6 +41,7 @@ composer cs                  # CS Fixer only
 composer test                # PHPUnit only
 composer guidelines:check    # CLAUDE.md drift only
 composer test-classes:check  # duplicate test class names only
+composer module-deps:check   # undeclared / unused ez-php package dependencies only
 ```
 
 **PHPStan:** never suppress with `@phpstan-ignore-line` — always fix the root cause.
@@ -198,20 +200,22 @@ vendor/bin/docker-init
 
 This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders. Existing files are never overwritten.
 
-Pass `--services` to merge MySQL/Redis/Meilisearch service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
+Pass `--services` to merge MySQL/Redis/Meilisearch/Memcached/Mailpit service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
 
 ```
 vendor/bin/docker-init --services=mysql
 vendor/bin/docker-init --services=redis
 vendor/bin/docker-init --services=meilisearch
 vendor/bin/docker-init --services=mysql,redis
+vendor/bin/docker-init --services=memcached,mailpit
 ```
 
-Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`:
+Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`, `memcached`, `apcu` (with `apc.enable_cli=1`):
 
 ```
 vendor/bin/docker-init --extensions=gmp,bcmath
 vendor/bin/docker-init --extensions=gd,imagick
+vendor/bin/docker-init --extensions=memcached,apcu
 ```
 
 When run from a module directory inside this monorepo, any requested extension not already present is also merged into the shared root `docker/app/Dockerfile` — the container `composer full` at the root actually runs against, distinct from the module's own standalone image.
@@ -270,9 +274,18 @@ src/
 ├── Counter.php                  — monotonically increasing metric; inc(), incBy()
 ├── Gauge.php                    — arbitrarily up/down metric; set(), inc(), dec(), incBy(), decBy()
 ├── Histogram.php                — bucket-based distribution; observe(); cumulative buckets
-├── MetricsRegistry.php          — factory + store: counter(), gauge(), histogram(), render()
+├── MetricsRegistry.php          — factory + store: counter(), gauge(), histogram(), render(), listen()
+├── MetricsListenerInterface.php — observer seam: recorded(MetricRecorded) for every inc/set/observe
+├── MetricRecorded.php           — event: type, name, value (counter increment / gauge result / observation), labels
+├── MetricsDispatcher.php        — a registry's listeners; skips a throwing listener
 ├── Metrics.php                  — static facade backed by MetricsRegistry singleton
 ├── MetricsController.php        — handles GET /metrics; returns Prometheus text response
+├── Storage/
+│   ├── MetricsStorageInterface.php — add/set/fields per metric + stored descriptions
+│   ├── InMemoryMetricsStorage.php  — per process (default)
+│   ├── ApcuMetricsStorage.php      — shared by one host's workers (ext-apcu)
+│   ├── RedisMetricsStorage.php     — shared across hosts (ext-redis)
+│   └── MetricDescription.php       — @internal: validates a stored description
 ├── MetricsServiceProvider.php   — binds MetricsRegistry, initialises Metrics facade, registers route
 └── HealthMetricsListener.php    — wraps a HealthRegistry; exposes probe status/latency as gauges (soft dependency on ez-php/health — require-dev only)
 
@@ -364,7 +377,7 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 
 `boot()` does two things:
 1. Calls `Metrics::setRegistry($this->app->make(MetricsRegistry::class))`.
-2. Registers `GET /metrics` on the bound `RouterInterface` (wrapped in `try/catch` for CLI/test contexts where none is bound).
+2. Registers `GET <metrics.endpoint>` (default `/metrics`) on the bound `RouterInterface` (wrapped in `try/catch` for CLI/test contexts where none is bound). `false` or `''` skips it, so an application can register `MetricsController` itself behind its own middleware — the contract's `RouterInterface::get()` returns a plain `object`, so the provider can't attach middleware without duck typing.
 
 ---
 
@@ -376,8 +389,8 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 - **`LabelFormatterTrait` instead of a base class.** Three metric types (Counter, Gauge, Histogram) share three private helpers. A trait avoids coupling all three to an abstract base class while keeping the logic DRY. The trait is `@internal`.
 - **`Histogram::DEFAULT_BUCKETS` constant.** The default bucket set follows the Prometheus Go client convention (suitable for HTTP request latency in seconds). Consumers can override buckets per-histogram.
 - **`render()` on each metric produces a self-contained block.** The registry simply joins blocks with `"\n"`. This lets metrics be tested in complete isolation without a registry.
-- **No metric persistence across requests.** In-memory only. For persistent metrics (across PHP-FPM workers, across restarts), use an external store such as Redis — this is out of scope for this module.
-- **No authentication on `/metrics` by default.** Following the same pattern as `ez-php/health` — operators add middleware at the application layer.
+- **Values live in a pluggable `MetricsStorageInterface`.** `InMemoryMetricsStorage` (default, per process) keeps the old behaviour; `ApcuMetricsStorage` shares values between the PHP-FPM workers of one host (fixed-point ints with 6 decimals, because only `apcu_inc` is atomic), `RedisMetricsStorage` across hosts (`HINCRBYFLOAT`/`HSET` on one hash per metric). Metric objects write through to the storage instead of holding values; sample keys are the JSON label key (histograms: `c|`, `s|`, `b|<bound>|` prefixes). Descriptions (type/help/buckets) are stored as well, so the `/metrics` request renders series that only other requests declared. Selected by `metrics.storage`.
+- **No authentication on `/metrics` by default.** Following the same pattern as `ez-php/health` — operators add middleware at the application layer, by disabling auto-registration (`metrics.endpoint` = `false`/`''`) and registering the route themselves.
 - **`HealthMetricsListener` lives here, not in `ez-php/health`.** `ez-php/health`'s own CLAUDE.md rules out metrics aggregation/Prometheus export inside that module ("What does not belong in this module"). `ez-php/metrics` is the module that already owns gauge creation and Prometheus rendering, so the bridge belongs here — `ez-php/health` itself needed zero changes.
 - **`ez-php/health` is a soft dependency, `require-dev` only.** `HealthMetricsListener` uses `HealthRegistry`/`HealthStatus`, but `composer.json`'s `require` block stays limited to `ez-php/contracts`/`ez-php/http` — same reasoning as `ez-php/orm`'s `LoggingDatabase`: a hard dependency would force `ez-php/health` on every application that installs `ez-php/metrics`, even ones with no health checks. PSR-4 only resolves `HealthMetricsListener.php` (and therefore `HealthRegistry`) when something actually references the class.
 - **`record()` is not auto-wired to anything.** No service-provider hook calls it automatically, and it is not registered against a schedule. The application decides when a `record()` call is worth its cost (e.g. immediately before serving `/metrics`, or on a `schedule:run` tick) — a module-level default would be a guess about deployment shape this module can't make.
@@ -404,7 +417,7 @@ No external infrastructure required. All tests run in-process with no I/O.
 
 | Concern | Where it belongs |
 |---------|-----------------|
-| Persistent metrics across PHP workers/restarts | Application layer (e.g. Redis-backed exporter) |
+| Pushgateway push, metric expiry / TTL of stale series | Application layer |
 | Authentication on /metrics | Application middleware |
 | Push gateway support (Prometheus Pushgateway) | Application layer |
 | StatsD / InfluxDB / OpenTelemetry export | Separate module or application layer |

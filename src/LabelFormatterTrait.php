@@ -16,6 +16,29 @@ use JsonException;
 trait LabelFormatterTrait
 {
     /**
+     * Reverses labelKey(): the label set stored under a sample key.
+     *
+     * @param string $key
+     *
+     * @return array<string, string>
+     */
+    private function labelsFromKey(string $key): array
+    {
+        $decoded = json_decode($key, true);
+        $labels = [];
+
+        if (is_array($decoded)) {
+            foreach ($decoded as $name => $value) {
+                if (is_string($name) && is_scalar($value)) {
+                    $labels[$name] = (string) $value;
+                }
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
      * Produces a stable string key for a set of labels.
      *
      * Labels are sorted by key before encoding so that `['b'=>'2','a'=>'1']`

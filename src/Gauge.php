@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace EzPhp\Metrics;
 
+use EzPhp\Metrics\Storage\InMemoryMetricsStorage;
+use EzPhp\Metrics\Storage\MetricsStorageInterface;
+
 /**
  * A gauge metric that can arbitrarily increase or decrease.
  *
@@ -21,12 +24,6 @@ final class Gauge implements MetricInterface
 {
     use LabelFormatterTrait;
 
-    /** @var array<string, float> */
-    private array $values = [];
-
-    /** @var array<string, array<string, string>> */
-    private array $labelSets = [];
-
     /**
      * @param string $name Prometheus metric name
      * @param string $help Human-readable description
@@ -34,6 +31,8 @@ final class Gauge implements MetricInterface
     public function __construct(
         private readonly string $name,
         private readonly string $help,
+        private readonly MetricsStorageInterface $storage = new InMemoryMetricsStorage(),
+        private readonly MetricsDispatcher $dispatcher = new MetricsDispatcher(),
     ) {
     }
 
@@ -68,9 +67,8 @@ final class Gauge implements MetricInterface
      */
     public function set(float $value, array $labels = []): void
     {
-        $key = $this->labelKey($labels);
-        $this->values[$key] = $value;
-        $this->labelSets[$key] = $labels;
+        $this->storage->set($this->name, $this->labelKey($labels), $value);
+        $this->notify($labels);
     }
 
     /**
@@ -100,9 +98,8 @@ final class Gauge implements MetricInterface
      */
     public function incBy(float $amount, array $labels = []): void
     {
-        $key = $this->labelKey($labels);
-        $this->values[$key] = ($this->values[$key] ?? 0.0) + $amount;
-        $this->labelSets[$key] = $labels;
+        $this->storage->add($this->name, $this->labelKey($labels), $amount);
+        $this->notify($labels);
     }
 
     /**
@@ -112,9 +109,23 @@ final class Gauge implements MetricInterface
      */
     public function decBy(float $amount, array $labels = []): void
     {
-        $key = $this->labelKey($labels);
-        $this->values[$key] = ($this->values[$key] ?? 0.0) - $amount;
-        $this->labelSets[$key] = $labels;
+        $this->storage->add($this->name, $this->labelKey($labels), -$amount);
+        $this->notify($labels);
+    }
+
+    /**
+     * Tell listeners the gauge's resulting value for this label set.
+     *
+     * @param array<string, string> $labels
+     */
+    private function notify(array $labels): void
+    {
+        if (!$this->dispatcher->hasListeners()) {
+            return;
+        }
+
+        $value = $this->storage->fields($this->name)[$this->labelKey($labels)] ?? 0.0;
+        $this->dispatcher->dispatch(new MetricRecorded(MetricType::GAUGE, $this->name, $value, $labels));
     }
 
     /**
@@ -129,15 +140,16 @@ final class Gauge implements MetricInterface
         $output = '# HELP ' . $this->name . ' ' . $this->help . "\n";
         $output .= '# TYPE ' . $this->name . ' ' . $this->type()->value . "\n";
 
-        if ($this->values === []) {
+        $values = $this->storage->fields($this->name);
+
+        if ($values === []) {
             $output .= $this->name . ' 0' . "\n";
 
             return $output;
         }
 
-        foreach ($this->values as $key => $value) {
-            $labels = $this->labelSets[$key];
-            $output .= $this->name . $this->renderLabels($labels) . ' ' . $this->formatValue($value) . "\n";
+        foreach ($values as $key => $value) {
+            $output .= $this->name . $this->renderLabels($this->labelsFromKey($key)) . ' ' . $this->formatValue($value) . "\n";
         }
 
         return $output;

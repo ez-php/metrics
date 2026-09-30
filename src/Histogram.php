@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace EzPhp\Metrics;
 
+use EzPhp\Metrics\Storage\InMemoryMetricsStorage;
+use EzPhp\Metrics\Storage\MetricsStorageInterface;
+
 /**
  * A histogram metric that samples observations and counts them in configurable buckets.
  *
@@ -41,42 +44,19 @@ final class Histogram implements MetricInterface
     private array $buckets;
 
     /**
-     * Per-label-set bucket hit counts, keyed by bucket upper-bound string representation.
-     *
-     * @var array<string, array<string, float>>
-     */
-    private array $bucketCounts = [];
-
-    /**
-     * Per-label-set sum of all observed values.
-     *
-     * @var array<string, float>
-     */
-    private array $sums = [];
-
-    /**
-     * Per-label-set count of observations.
-     *
-     * @var array<string, int>
-     */
-    private array $counts = [];
-
-    /**
-     * Per-label-set label arrays, indexed by the same key as $sums/$counts.
-     *
-     * @var array<string, array<string, string>>
-     */
-    private array $labelSets = [];
-
-    /**
      * @param string     $name    Prometheus metric name
      * @param string     $help    Human-readable description
      * @param list<float> $buckets Bucket upper bounds (excluding +Inf, which is always added)
+     * @param MetricsStorageInterface $storage Where observations are kept. Samples are stored
+     *                                         as `c|<labels>` (count), `s|<labels>` (sum) and
+     *                                         `b|<bound>|<labels>` (bucket hits).
      */
     public function __construct(
         private readonly string $name,
         private readonly string $help,
         array $buckets = self::DEFAULT_BUCKETS,
+        private readonly MetricsStorageInterface $storage = new InMemoryMetricsStorage(),
+        private readonly MetricsDispatcher $dispatcher = new MetricsDispatcher(),
     ) {
         sort($buckets);
         $this->buckets = $buckets;
@@ -118,22 +98,18 @@ final class Histogram implements MetricInterface
     {
         $key = $this->labelKey($labels);
 
-        if (!isset($this->counts[$key])) {
-            $this->sums[$key] = 0.0;
-            $this->counts[$key] = 0;
-            $this->labelSets[$key] = $labels;
-            $this->bucketCounts[$key] = [];
-        }
-
         foreach ($this->buckets as $bound) {
             if ($value <= $bound) {
-                $boundStr = $this->formatValue($bound);
-                $this->bucketCounts[$key][$boundStr] = ($this->bucketCounts[$key][$boundStr] ?? 0.0) + 1.0;
+                $this->storage->add($this->name, 'b|' . $this->formatValue($bound) . '|' . $key, 1.0);
             }
         }
 
-        $this->sums[$key] += $value;
-        $this->counts[$key]++;
+        $this->storage->add($this->name, 's|' . $key, $value);
+        $this->storage->add($this->name, 'c|' . $key, 1.0);
+
+        if ($this->dispatcher->hasListeners()) {
+            $this->dispatcher->dispatch(new MetricRecorded(MetricType::HISTOGRAM, $this->name, $value, $labels));
+        }
     }
 
     /**
@@ -150,13 +126,27 @@ final class Histogram implements MetricInterface
         $output = '# HELP ' . $this->name . ' ' . $this->help . "\n";
         $output .= '# TYPE ' . $this->name . ' ' . $this->type()->value . "\n";
 
-        foreach ($this->counts as $key => $count) {
-            $labels = $this->labelSets[$key];
-            $bucketCounts = $this->bucketCounts[$key];
+        $counts = [];
+        $sums = [];
+        $bucketCounts = [];
+
+        foreach ($this->storage->fields($this->name) as $field => $value) {
+            $parts = explode('|', $field, 3);
+
+            match ($parts[0]) {
+                'c' => $counts[$parts[1] ?? ''] = (int) round($value),
+                's' => $sums[$parts[1] ?? ''] = $value,
+                'b' => $bucketCounts[$parts[2] ?? ''][$parts[1] ?? ''] = $value,
+                default => null,
+            };
+        }
+
+        foreach ($counts as $key => $count) {
+            $labels = $this->labelsFromKey((string) $key);
 
             foreach ($this->buckets as $bound) {
                 $boundStr = $this->formatValue($bound);
-                $bucketCount = $bucketCounts[$boundStr] ?? 0.0;
+                $bucketCount = $bucketCounts[$key][$boundStr] ?? 0.0;
                 $bucketLabels = array_merge($labels, ['le' => $boundStr]);
                 $output .= $this->name . '_bucket' . $this->renderLabels($bucketLabels)
                     . ' ' . $this->formatValue($bucketCount) . "\n";
@@ -167,7 +157,7 @@ final class Histogram implements MetricInterface
             $output .= $this->name . '_bucket' . $this->renderLabels($infLabels) . ' ' . $count . "\n";
 
             $output .= $this->name . '_count' . $this->renderLabels($labels) . ' ' . $count . "\n";
-            $output .= $this->name . '_sum' . $this->renderLabels($labels) . ' ' . $this->formatValue($this->sums[$key]) . "\n";
+            $output .= $this->name . '_sum' . $this->renderLabels($labels) . ' ' . $this->formatValue($sums[$key] ?? 0.0) . "\n";
         }
 
         return $output;
