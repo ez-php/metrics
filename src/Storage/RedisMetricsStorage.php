@@ -29,16 +29,25 @@ final readonly class RedisMetricsStorage implements MetricsStorageInterface
     ) {
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function add(string $metric, string $field, float $amount): void
     {
         $this->redis->hIncrByFloat($this->prefix . 'm:' . $metric, $field, $amount);
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function set(string $metric, string $field, float $value): void
     {
         $this->redis->hSet($this->prefix . 'm:' . $metric, $field, (string) $value);
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function fields(string $metric): array
     {
         $raw = $this->redis->hGetAll($this->prefix . 'm:' . $metric);
@@ -55,11 +64,17 @@ final readonly class RedisMetricsStorage implements MetricsStorageInterface
         return $fields;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function describe(string $metric, array $description): void
     {
         $this->redis->hSetNx($this->prefix . 'meta', $metric, json_encode($description, JSON_THROW_ON_ERROR));
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function descriptions(): array
     {
         $raw = $this->redis->hGetAll($this->prefix . 'meta');
@@ -78,6 +93,9 @@ final readonly class RedisMetricsStorage implements MetricsStorageInterface
         return $descriptions;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function wipe(): void
     {
         $keys = [$this->prefix . 'meta'];

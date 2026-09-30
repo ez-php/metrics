@@ -30,11 +30,11 @@ final class MetricsRegistry
     /** @var array<string, MetricInterface> */
     private array $metrics = [];
 
-    /**
-     * @param MetricsStorageInterface $storage
-     */
     private readonly MetricsDispatcher $dispatcher;
 
+    /**
+     * @param MetricsStorageInterface $storage Where metric values are kept (in-memory by default).
+     */
     public function __construct(
         private readonly MetricsStorageInterface $storage = new InMemoryMetricsStorage(),
     ) {

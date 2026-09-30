@@ -40,6 +40,9 @@ final readonly class ApcuMetricsStorage implements MetricsStorageInterface
         }
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function add(string $metric, string $field, float $amount): void
     {
         $key = $this->key($metric, $field);
@@ -49,11 +52,17 @@ final readonly class ApcuMetricsStorage implements MetricsStorageInterface
         apcu_inc($key, $step);
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function set(string $metric, string $field, float $value): void
     {
         apcu_store($this->key($metric, $field), (int) round($value * self::SCALE));
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function fields(string $metric): array
     {
         $prefix = $this->prefix . 'm:' . $metric . "\0";
@@ -68,11 +77,17 @@ final readonly class ApcuMetricsStorage implements MetricsStorageInterface
         return $fields;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function describe(string $metric, array $description): void
     {
         apcu_add($this->prefix . 'meta' . "\0" . $metric, json_encode($description, JSON_THROW_ON_ERROR));
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function descriptions(): array
     {
         $prefix = $this->prefix . 'meta' . "\0";
@@ -93,6 +108,9 @@ final readonly class ApcuMetricsStorage implements MetricsStorageInterface
         return $descriptions;
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function wipe(): void
     {
         apcu_delete(new APCUIterator('/^' . preg_quote($this->prefix, '/') . '/'));
