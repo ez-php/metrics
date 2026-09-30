@@ -9,6 +9,7 @@ use EzPhp\Health\HealthResult;
 use EzPhp\Health\ProbeInterface;
 use EzPhp\Metrics\Gauge;
 use EzPhp\Metrics\HealthMetricsListener;
+use EzPhp\Metrics\MetricsDispatcher;
 use EzPhp\Metrics\MetricsRegistry;
 use EzPhp\Metrics\Storage\InMemoryMetricsStorage;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -42,6 +43,7 @@ final class HealthMetricsListenerFakeProbe implements ProbeInterface
 #[UsesClass(InMemoryMetricsStorage::class)]
 #[UsesClass(MetricsRegistry::class)]
 #[UsesClass(Gauge::class)]
+#[UsesClass(MetricsDispatcher::class)]
 final class HealthMetricsListenerTest extends TestCase
 {
     public function testRecordSetsOneGaugeValuePerProbeStatus(): void

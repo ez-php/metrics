@@ -7,6 +7,7 @@ namespace Tests\Storage;
 use EzPhp\Metrics\Counter;
 use EzPhp\Metrics\Gauge;
 use EzPhp\Metrics\Histogram;
+use EzPhp\Metrics\MetricsDispatcher;
 use EzPhp\Metrics\MetricsRegistry;
 use EzPhp\Metrics\Storage\ApcuMetricsStorage;
 use EzPhp\Metrics\Storage\InMemoryMetricsStorage;
@@ -37,6 +38,7 @@ use Throwable;
 #[UsesClass(Counter::class)]
 #[UsesClass(Gauge::class)]
 #[UsesClass(Histogram::class)]
+#[UsesClass(MetricsDispatcher::class)]
 final class MetricsStorageTest extends TestCase
 {
     private ?MetricsStorageInterface $storage = null;

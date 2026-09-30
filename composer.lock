@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "954a5aad4d13af62fdecf47c6f81a40a",
+    "content-hash": "a8b0d8ffab5481009786bff90b2f76be",
     "packages": [
         {
             "name": "ez-php/contracts",
@@ -561,16 +561,16 @@
         },
         {
             "name": "ez-php/health",
-            "version": "2.5.4",
+            "version": "2.5.5",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/health.git",
-                "reference": "6142ad730bc7897b534f0bfff49728c957e99345"
+                "reference": "237646a7af8098ce60bddb44dda81f51ead51383"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/health/zipball/6142ad730bc7897b534f0bfff49728c957e99345",
-                "reference": "6142ad730bc7897b534f0bfff49728c957e99345",
+                "url": "https://api.github.com/repos/ez-php/health/zipball/237646a7af8098ce60bddb44dda81f51ead51383",
+                "reference": "237646a7af8098ce60bddb44dda81f51ead51383",
                 "shasum": ""
             },
             "require": {
@@ -621,7 +621,7 @@
                 "issues": "https://github.com/ez-php/health/issues",
                 "source": "https://github.com/ez-php/health"
             },
-            "time": "2026-09-26T02:22:20+00:00"
+            "time": "2026-09-30T14:17:56+00:00"
         },
         {
             "name": "fidry/cpu-core-counter",
