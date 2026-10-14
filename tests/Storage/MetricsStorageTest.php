@@ -75,12 +75,19 @@ final class MetricsStorageTest extends TestCase
             self::markTestSkipped('ext-redis is not loaded.');
         }
 
+        // Redis::connect() warns *and* throws on an unresolvable host; the warning
+        // alone would fail the run (failOnWarning) where ext-redis is loaded but no
+        // server runs, e.g. the CI compatibility jobs.
+        set_error_handler(static fn (): bool => true, E_WARNING);
+
         try {
             $redis = new Redis();
             $redis->connect(getenv('REDIS_HOST') ?: 'redis', (int) (getenv('REDIS_PORT') ?: 6379));
             $redis->select(5);
         } catch (Throwable $e) {
             self::markTestSkipped('Redis is not reachable: ' . $e->getMessage());
+        } finally {
+            restore_error_handler();
         }
 
         return new RedisMetricsStorage($redis, 'ez-php:metrics-test:');

@@ -124,6 +124,19 @@ final class MetricsServiceProviderTest extends TestCase
             'metrics.redis.database' => 5,
         ]));
         (new MetricsServiceProvider($redis))->register();
-        $this->assertInstanceOf(\EzPhp\Metrics\Storage\RedisMetricsStorage::class, $redis->make(MetricsRegistry::class)->storage());
+
+        // ext-redis without a reachable server (CI compatibility jobs): the provider's
+        // connect() warns and throws — that is the environment, not the selection logic.
+        set_error_handler(static fn (): bool => true, E_WARNING);
+
+        try {
+            $storage = $redis->make(MetricsRegistry::class)->storage();
+        } catch (\RedisException $e) {
+            $this->markTestSkipped('Redis is not reachable: ' . $e->getMessage());
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertInstanceOf(\EzPhp\Metrics\Storage\RedisMetricsStorage::class, $storage);
     }
 }

@@ -9,10 +9,25 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Primary test job: host-based, PHP 8.5, full quality suite + coverage
   #
-  # No external service dependencies — runs directly on GitHub Actions host.
+  # Runs on the GitHub Actions host with a Redis service container for the Redis
+  # storage tests; the compatibility jobs below have no Redis and skip those tests.
   # ─────────────────────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
 
     steps:
       - name: Checkout code
