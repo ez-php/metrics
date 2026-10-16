@@ -10,7 +10,8 @@ jobs:
   # Primary test job: host-based, PHP 8.5, full quality suite + coverage
   #
   # Runs on the GitHub Actions host with a Redis service container for the Redis
-  # storage tests; the compatibility jobs below have no Redis and skip those tests.
+  # storage tests and ext-apcu (apc.enable_cli=1) for the APCu storage tests; the
+  # compatibility jobs below have APCu but no Redis and skip the Redis tests.
   # ─────────────────────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
@@ -38,7 +39,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
-          extensions: pdo_sqlite
+          extensions: pdo_sqlite, apcu
+          ini-values: apc.enable_cli=1
           coverage: pcov
 
       - name: Cache Composer packages
@@ -109,7 +111,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: pdo_sqlite
+          extensions: pdo_sqlite, apcu
+          ini-values: apc.enable_cli=1
           coverage: none
 
       - name: Cache Composer packages

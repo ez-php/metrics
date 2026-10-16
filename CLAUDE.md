@@ -198,7 +198,7 @@ Run from the new module root (requires `"ez-php/docker": "^2.0"` in `require-dev
 vendor/bin/docker-init
 ```
 
-This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders. Existing files are never overwritten.
+This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders (`docker/db/`, the MySQL init script, only with `--services=mysql`). Existing files are never overwritten.
 
 Pass `--services` to merge MySQL/Redis/Meilisearch/Memcached/Mailpit service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
 
@@ -243,7 +243,8 @@ After scaffolding:
 | `ez-php/feature-flags` | — | 6385 (`REDIS_HOST_PORT`) | — |
 | `ez-php/scheduler` | — | 6386 (`REDIS_HOST_PORT`) | — |
 | `ez-php/session` | — | 6387 (`REDIS_HOST_PORT`) | — |
-| **next free** | **3312** | **6388** | **7702** |
+| `ez-php/metrics` | — | 6388 (`REDIS_HOST_PORT`) | — |
+| **next free** | **3312** | **6389** | **7702** |
 
 Only set a port for services the module actually uses. Modules without external services need no port config.
 
@@ -297,7 +298,15 @@ tests/
 ├── MetricsRegistryTest.php      — factory idempotency, type conflict throws, render assembly
 ├── MetricsTest.php              — facade init/reset, delegation, fail-fast throw
 ├── MetricsControllerTest.php    — HTTP 200, content type, body delegation to registry
-└── HealthMetricsListenerTest.php — covers HealthMetricsListener: status→gauge mapping (1/0.5/0), latency gauge, empty-registry no-op
+├── MetricsListenerTest.php      — MetricsListenerInterface: metric events reach registered listeners
+├── MetricsServiceProviderTest.php — registry binding, facade boot, endpoint route (default / configured / disabled), storage selection
+├── HealthMetricsListenerTest.php — covers HealthMetricsListener: status→gauge mapping (1/0.5/0), latency gauge, empty-registry no-op
+├── Storage/
+│   └── MetricsStorageTest.php   — one contract run against memory, APCu and Redis storage (data provider); APCu/Redis cases skip when unavailable
+└── Support/
+    ├── FakeConfig.php           — minimal ConfigInterface stub
+    ├── FakeContainer.php        — minimal ContainerInterface stub
+    └── MetricsRecordingRouter.php — RouterInterface stub recording registered routes
 ```
 
 ---
@@ -399,7 +408,12 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 
 ## Testing approach
 
-No external infrastructure required. All tests run in-process with no I/O.
+Most tests run in-process with no I/O. `Storage/MetricsStorageTest` runs the same storage contract against all three backends and needs:
+
+- **APCu** — ext-apcu with `apc.enable_cli=1`. Installed in the module image (`docker/app/Dockerfile`), the root image and both CI jobs (`setup-php` `extensions: apcu`, `ini-values: apc.enable_cli=1`).
+- **Redis** — a live server at `REDIS_HOST`/`REDIS_PORT` (default `redis:6379`): the module stack's `redis` service (host port 6388), the CI `redis` service container (`test` job only), or the root stack. `MetricsServiceProviderTest`'s Redis-storage case uses the same server.
+
+Either case is skipped (not failed) when its backend is unavailable — the compatibility CI jobs have no Redis, for example.
 
 - `CounterTest` — inc, incBy, negative throw, label normalization, render format including zero-value line
 - `GaugeTest` — set, inc, dec, incBy, decBy, negative values, multi-label series, render format
