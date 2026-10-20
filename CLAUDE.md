@@ -281,6 +281,7 @@ src/
 ├── MetricsDispatcher.php        — a registry's listeners; skips a throwing listener
 ├── Metrics.php                  — static facade backed by MetricsRegistry singleton
 ├── MetricsController.php        — handles GET /metrics; returns Prometheus text response
+├── RequestMetricsMiddleware.php — opt-in: http_requests_total + http_request_duration_seconds by method/route pattern/status
 ├── Storage/
 │   ├── MetricsStorageInterface.php — add/set/fields per metric + stored descriptions
 │   ├── InMemoryMetricsStorage.php  — per process (default)
@@ -298,6 +299,7 @@ tests/
 ├── MetricsRegistryTest.php      — factory idempotency, type conflict throws, render assembly
 ├── MetricsTest.php              — facade init/reset, delegation, fail-fast throw
 ├── MetricsControllerTest.php    — HTTP 200, content type, body delegation to registry
+├── RequestMetricsMiddlewareTest.php — labels (pattern, grouped/exact status, unmatched, no resolver), exception → 5xx
 ├── MetricsListenerTest.php      — MetricsListenerInterface: metric events reach registered listeners
 ├── MetricsServiceProviderTest.php — registry binding, facade boot, endpoint route (default / configured / disabled), storage selection
 ├── HealthMetricsListenerTest.php — covers HealthMetricsListener: status→gauge mapping (1/0.5/0), latency gauge, empty-registry no-op
@@ -374,6 +376,12 @@ Wraps a `HealthRegistry` (from `ez-php/health`) and a `MetricsRegistry`. `record
 
 ---
 
+### RequestMetricsMiddleware (`src/RequestMetricsMiddleware.php`)
+
+Opt-in global middleware: per request one `http_requests_total` increment and one `http_request_duration_seconds` observation (default buckets), labelled `method`, `route`, `status`. `route` comes from an optional `Closure(RequestInterface): ?string` resolver called after `$next` returned — in an ez-php application `ez-php/framework`'s `Router::matchedRoute()?->getPath()`, the matched *pattern*; `null` → `unmatched`; without a resolver the label is omitted. `status` is the class (`2xx`) unless `exactStatus: true`. An escaping exception is recorded as status 500 and rethrown. Never auto-registered.
+
+---
+
 ### MetricsController (`src/MetricsController.php`)
 
 Invokable controller resolved from the container. Calls `$registry->render()` and returns `Response` with status 200 and `Content-Type: text/plain; version=0.0.4; charset=utf-8`.
@@ -435,7 +443,8 @@ Either case is skipped (not failed) when its backend is unavailable — the comp
 | Authentication on /metrics | Application middleware |
 | Push gateway support (Prometheus Pushgateway) | Application layer |
 | StatsD / InfluxDB / OpenTelemetry export | Separate module or application layer |
-| Automatic HTTP request instrumentation | Application middleware (use `Metrics::counter(...)` in your own `MetricsMiddleware`) |
+| *Automatic* HTTP request instrumentation (registered behind the application's back) | Not done — `RequestMetricsMiddleware` ships, but the application adds it to its middleware stack explicitly (like `ez-php/otel`'s `OtelMiddleware`) |
+| Per-URI or per-user request labels | Not supported — unbounded cardinality; `RequestMetricsMiddleware` labels by route pattern |
 | Scheduling/triggering `HealthMetricsListener::record()` | Application layer (a middleware, a `schedule:run` job, etc.) |
 | Alerting rules | Prometheus server configuration |
 | Dashboard definitions | Grafana or similar |

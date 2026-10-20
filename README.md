@@ -66,6 +66,33 @@ Metrics::histogram('response_size_bytes', 'Response size', [100, 1000, 10000, 10
 
 ---
 
+## HTTP request metrics
+
+`RequestMetricsMiddleware` records `http_requests_total` and `http_request_duration_seconds`
+for every request, labelled `method`, `route` and `status`. It is opt-in — register it as
+global middleware and pass a route resolver so `route` is the matched route **pattern**
+(`/users/{id}`), never the raw URI:
+
+```php
+use EzPhp\Metrics\MetricsRegistry;
+use EzPhp\Metrics\RequestMetricsMiddleware;
+use EzPhp\Routing\Router;
+
+// in a service provider's register()
+$this->app->bind(RequestMetricsMiddleware::class, fn ($app) => new RequestMetricsMiddleware(
+    $app->make(MetricsRegistry::class),
+    static fn (): ?string => $app->make(Router::class)->matchedRoute()?->getPath(),
+));
+
+// bootstrap
+$app->middleware(RequestMetricsMiddleware::class);
+```
+
+Unmatched requests (404/405) get `route="unmatched"`; without a resolver the `route` label is
+left out. Status is grouped (`2xx`, `4xx`, …) — pass `exactStatus: true` for exact codes.
+
+---
+
 ## /metrics endpoint
 
 `MetricsServiceProvider` registers `GET /metrics` automatically. The response body is the full Prometheus text exposition format output:
