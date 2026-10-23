@@ -24,7 +24,8 @@ use Redis;
  *                      MetricsController itself with its own middleware.
  *   metrics.storage  — `memory` (default, per process), `apcu` (shared by the
  *                      PHP-FPM workers of one host) or `redis` (shared across
- *                      hosts; metrics.redis.host/port/database/prefix).
+ *                      hosts; metrics.redis.host/port/database).
+ *   metrics.prefix   — key prefix in APCu/Redis (default 'ez-php:metrics:').
  *
  * The route is only registered when the Router is available in the
  * container. In CLI or isolated test contexts where the Router is not bound
