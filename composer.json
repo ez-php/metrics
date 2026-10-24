@@ -26,8 +26,8 @@
     },
     "require": {
         "php": "^8.5",
-        "ez-php/contracts": "^2.0",
-        "ez-php/http": "^2.0"
+        "ez-php/contracts": "^2.6.0",
+        "ez-php/http": "^2.6.0"
     },
     "suggest": {
         "ez-php/health": "Needed for HealthMetricsListener (probe status/latency as gauges)",
@@ -35,8 +35,8 @@
         "ext-redis": "Needed for metrics.storage = redis (RedisMetricsStorage: series shared across hosts)"
     },
     "require-dev": {
-        "ez-php/docker": "^2.0",
-        "ez-php/health": "^2.0",
+        "ez-php/docker": "^2.6.0",
+        "ez-php/health": "^2.6.0",
         "phpunit/phpunit": "^13.0",
         "phpstan/phpstan": "^2.1",
         "friendsofphp/php-cs-fixer": "^3.94",
