@@ -443,7 +443,7 @@ Either case is skipped (not failed) when its backend is unavailable — the comp
 | Pushgateway push, metric expiry / TTL of stale series | Application layer |
 | Authentication on /metrics | Application middleware |
 | Push gateway support (Prometheus Pushgateway) | Application layer |
-| StatsD / InfluxDB / OpenTelemetry export | Separate module or application layer |
+| StatsD / InfluxDB / OpenTelemetry export | `ez-php/metrics-statsd`, `ez-php/metrics-otlp`; others: separate module or application layer |
 | *Automatic* HTTP request instrumentation (registered behind the application's back) | Not done — `RequestMetricsMiddleware` ships, but the application adds it to its middleware stack explicitly (like `ez-php/otel`'s `OtelMiddleware`) |
 | Per-URI or per-user request labels | Not supported — unbounded cardinality; `RequestMetricsMiddleware` labels by route pattern |
 | Scheduling/triggering `HealthMetricsListener::record()` | Application layer (a middleware, a `schedule:run` job, etc.) |
