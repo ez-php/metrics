@@ -283,6 +283,7 @@ src/
 ├── Metrics.php                  — static facade backed by MetricsRegistry singleton
 ├── MetricsController.php        — handles GET /metrics; returns Prometheus text response
 ├── RequestMetricsMiddleware.php — opt-in: http_requests_total + http_request_duration_seconds by method/route pattern/status
+├── MeteredQueue.php             — opt-in QueueInterface decorator: pushed/popped/failed counters by queue, queue_size gauge on size()
 ├── Storage/
 │   ├── MetricsStorageInterface.php — add/set/fields per metric + stored descriptions
 │   ├── InMemoryMetricsStorage.php  — per process (default)

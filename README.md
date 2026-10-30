@@ -93,6 +93,24 @@ left out. Status is grouped (`2xx`, `4xx`, …) — pass `exactStatus: true` for
 
 ---
 
+## Queue metrics
+
+`MeteredQueue` wraps a `QueueInterface` and records `queue_jobs_pushed_total`, `queue_jobs_popped_total` and
+`queue_jobs_failed_total`, labelled `queue`. Its `size()` also publishes the `queue_size` gauge, so that
+gauge moves only when something calls `size()`, for example `queue:monitor` or a scheduled task. It is
+opt-in, and like `UniqueQueue` it hides the driver's `FailedJobRepositoryInterface`:
+
+```php
+use EzPhp\Contracts\QueueInterface;
+use EzPhp\Metrics\MeteredQueue;
+use EzPhp\Metrics\MetricsRegistry;
+
+// in a service provider's register(); $driver is your real queue
+$this->app->bind(QueueInterface::class, fn ($app) => new MeteredQueue($driver, $app->make(MetricsRegistry::class)));
+```
+
+---
+
 ## /metrics endpoint
 
 `MetricsServiceProvider` registers `GET /metrics` automatically. The response body is the full Prometheus text exposition format output:
