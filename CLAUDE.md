@@ -303,14 +303,14 @@ tests/
 ├── MetricsControllerTest.php    — HTTP 200, content type, body delegation to registry
 ├── RequestMetricsMiddlewareTest.php — labels (pattern, grouped/exact status, unmatched, no resolver), exception → 5xx
 ├── MetricsListenerTest.php      — MetricsListenerInterface: metric events reach registered listeners
-├── MetricsServiceProviderTest.php — registry binding, facade boot, endpoint route (default / configured / disabled), storage selection
+├── MetricsServiceProviderTest.php — registry binding, facade boot, endpoint route (default / configured / disabled / refused path throws), storage selection
 ├── HealthMetricsListenerTest.php — covers HealthMetricsListener: status→gauge mapping (1/0.5/0), latency gauge, empty-registry no-op
 ├── Storage/
 │   └── MetricsStorageTest.php   — one contract run against memory, APCu and Redis storage (data provider); APCu/Redis cases skip when unavailable
 └── Support/
     ├── FakeConfig.php           — minimal ConfigInterface stub
     ├── FakeContainer.php        — minimal ContainerInterface stub
-    └── MetricsRecordingRouter.php — RouterInterface stub recording registered routes
+    └── MetricsRecordingRouter.php — RouterInterface stub recording registered routes; optionally rejects one path as a duplicate
 ```
 
 ---
@@ -396,7 +396,7 @@ Invokable controller resolved from the container. Calls `$registry->render()` an
 
 `boot()` does two things:
 1. Calls `Metrics::setRegistry($this->app->make(MetricsRegistry::class))`.
-2. Registers `GET <metrics.endpoint>` (default `/metrics`) on the bound `RouterInterface` (wrapped in `try/catch` for CLI/test contexts where none is bound). `false` or `''` skips it, so an application can register `MetricsController` itself behind its own middleware — the contract's `RouterInterface::get()` returns a plain `object`, so the provider can't attach middleware without duck typing.
+2. Registers `GET <metrics.endpoint>` (default `/metrics`) on the bound `RouterInterface` (skipped when none is bound — `has()` false, CLI/test contexts; a path the router refuses as a duplicate throws instead of being swallowed, as it was until 2.7.2). `false` or `''` skips it, so an application can register `MetricsController` itself behind its own middleware — the contract's `RouterInterface::get()` returns a plain `object`, so the provider can't attach middleware without duck typing.
 
 ---
 

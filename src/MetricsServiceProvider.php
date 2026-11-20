@@ -62,12 +62,13 @@ final class MetricsServiceProvider extends ServiceProvider
             return;
         }
 
-        try {
-            $router = $this->app->make(RouterInterface::class);
-            $router->get($endpoint, [MetricsController::class, '__invoke']);
-        } catch (\Throwable) {
-            // Router not bound (CLI or isolated test context) — route skipped.
+        // No router bound (CLI or isolated test context) — no route. Only that case is
+        // skipped: a route the router refuses (a duplicate path) must surface.
+        if (!$this->app->has(RouterInterface::class)) {
+            return;
         }
+
+        $this->app->make(RouterInterface::class)->get($endpoint, [MetricsController::class, '__invoke']);
     }
 
     /**

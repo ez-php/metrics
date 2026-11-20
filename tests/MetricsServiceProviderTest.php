@@ -91,6 +91,19 @@ final class MetricsServiceProviderTest extends TestCase
         $this->assertSame([], $router->getPaths);
     }
 
+    public function test_a_route_registration_failure_is_reported_not_swallowed(): void
+    {
+        $container = new FakeContainer(new FakeConfig(['metrics.endpoint' => '/health']));
+        $container->instance(\EzPhp\Contracts\RouterInterface::class, new MetricsRecordingRouter(rejects: '/health'));
+        $provider = new MetricsServiceProvider($container);
+        $provider->register();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Duplicate route: GET /health');
+
+        $provider->boot();
+    }
+
     /**
      * @param array<string, mixed> $config
      */
